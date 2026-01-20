@@ -1,0 +1,37 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               Int       @id @default(autoincrement())
+  userHash         String    @unique @map("user_hash")
+  strikeCount      Int       @default(0) @map("strike_count")
+  isBanned         Boolean   @default(false) @map("is_banned")
+  lastSubmissionAt DateTime? @map("last_submission_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  
+  messages         Message[]
+
+  @@map("users")
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  userHash  String   @map("user_hash")
+  content   String?
+  imageId   String?  @map("image_id") // Telegram file_id for images
+  status    String   @default("pending") // pending | approved | rejected
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userHash], references: [userHash])
+
+  @@map("messages")
+}
