@@ -5,6 +5,28 @@ import type { MyContext } from '../bot';
 
 const actionHandler = new Composer<MyContext>();
 
+// Strike system messages
+function getStrikeMessage(strikeCount: number): string {
+  if (strikeCount >= 10) {
+    return `🚫 *You have been permanently banned.*\n\nYou have received ${strikeCount} strikes due to multiple violations. You can no longer use this bot.`;
+  } else if (strikeCount >= 5) {
+    const hoursBlocked = strikeCount >= 7 ? 72 : (strikeCount >= 6 ? 48 : 24);
+    return `⏳ *You have been temporarily blocked for ${hoursBlocked} hours.*\n\nYou have ${strikeCount} strikes. After ${10 - strikeCount} more rejected submissions, you will be permanently banned.\n\nPlease follow our rules and guidelines.`;
+  } else if (strikeCount >= 3) {
+    return `⚠️ *Warning: Your confession was not approved.*\n\nYou now have ${strikeCount} strikes. After 5 strikes, you will be temporarily blocked. After 10 strikes, you will be permanently banned.\n\nPlease follow our rules and guidelines.`;
+  } else {
+    return `😔 *Your confession was not approved.*\n\nThis may be due to content guidelines. You have ${strikeCount} strike${strikeCount > 1 ? 's' : ''}.\n\n📌 *Reminder:*\n• 5 strikes = Temporary block (24-72h)\n• 10 strikes = Permanent ban\n\nPlease follow our rules and guidelines.`;
+  }
+}
+
+// Get temporary block duration based on strike count
+function getBlockDuration(strikeCount: number): number {
+  // Returns hours of block
+  if (strikeCount >= 7) return 72;
+  if (strikeCount >= 6) return 48;
+  return 24;
+}
+
 // Handle approve action
 actionHandler.callbackQuery(/^approve_(\d+)$/, async (ctx) => {
   const messageId = parseInt(ctx.match[1]);
@@ -102,29 +124,65 @@ actionHandler.callbackQuery(/^reject_(\d+)$/, async (ctx) => {
       data: { status: 'rejected' },
     });
 
-    // Notify the sender
+    // Increment strike count for the user
+    const updatedUser = await prisma.user.update({
+      where: { userHash: message.userHash },
+      data: { 
+        strikeCount: { increment: 1 } 
+      },
+    });
+
+    const newStrikeCount = updatedUser.strikeCount;
+    console.log(`⚠️ User ${message.userHash} strike count: ${newStrikeCount}`);
+
+    // Handle strike consequences
+    let statusText = `Strike ${newStrikeCount}/10`;
+    
+    if (newStrikeCount >= 10) {
+      // Permanent ban
+      await prisma.user.update({
+        where: { userHash: message.userHash },
+        data: { isBanned: true },
+      });
+      statusText = '🚫 BANNED';
+      console.log(`🚫 User ${message.userHash} has been permanently banned (10 strikes)`);
+    } else if (newStrikeCount >= 5) {
+      // Temporary block
+      const blockHours = getBlockDuration(newStrikeCount);
+      const blockedUntil = new Date(Date.now() + blockHours * 60 * 60 * 1000);
+      await prisma.user.update({
+        where: { userHash: message.userHash },
+        data: { blockedUntil },
+      });
+      statusText = `⏳ Blocked ${blockHours}h (Strike ${newStrikeCount}/10)`;
+      console.log(`⏳ User ${message.userHash} temporarily blocked for ${blockHours}h`);
+    }
+
+    // Notify the sender with appropriate message
     try {
-      await ctx.api.sendMessage(
-        message.senderId,
-        '😔 Unfortunately, your confession was not approved. This could be due to content guidelines. Feel free to try again with a different message.'
-      );
+      const userMessage = getStrikeMessage(newStrikeCount);
+      await ctx.api.sendMessage(message.senderId, userMessage, { parse_mode: 'Markdown' });
     } catch (error) {
-      console.log('Could not notify user (they may have blocked the bot):', error);
+      console.log('Could not notify user (they may have blocked the bot)');
     }
 
     // Update admin message to show it's been processed
     await ctx.editMessageReplyMarkup({ reply_markup: undefined });
-    await ctx.editMessageCaption({
-      caption: `❌ REJECTED\n\n${message.content || '(Image)'}`,
-      parse_mode: 'Markdown',
-    }).catch(() => {
-      // If it's a text message (no caption), edit the text instead
-      ctx.editMessageText(`❌ REJECTED\n\n${message.content || ''}`, {
+    
+    const adminCaption = `❌ REJECTED | ${statusText}\n\n${message.content || '(Image)'}`;
+    
+    if (message.imageId) {
+      await ctx.editMessageCaption({
+        caption: adminCaption,
         parse_mode: 'Markdown',
       });
-    });
+    } else {
+      await ctx.editMessageText(adminCaption, {
+        parse_mode: 'Markdown',
+      });
+    }
 
-    await ctx.answerCallbackQuery({ text: '❌ Rejected!' });
+    await ctx.answerCallbackQuery({ text: `❌ Rejected! ${statusText}` });
     
     console.log(`❌ Message #${messageId} rejected`);
   } catch (error) {

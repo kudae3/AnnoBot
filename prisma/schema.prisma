@@ -15,6 +15,7 @@ model User {
   userHash         String    @unique @map("user_hash")
   strikeCount      Int       @default(0) @map("strike_count")
   isBanned         Boolean   @default(false) @map("is_banned")
+  blockedUntil     DateTime? @map("blocked_until") // Temporary block expiry
   lastSubmissionAt DateTime? @map("last_submission_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   

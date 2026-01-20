@@ -57,10 +57,25 @@ submitHandler.on('message:text', async (ctx) => {
       },
     });
 
-    // Check if user is banned
+    // Check if user is permanently banned
     if (user.isBanned) {
-      await ctx.reply('❌ You have been banned from using this bot.');
+      await ctx.reply('🚫 You have been permanently banned from using this bot due to multiple violations.');
       return;
+    }
+
+    // Check if user is temporarily blocked
+    if (user.blockedUntil && new Date(user.blockedUntil) > new Date()) {
+      const remainingTime = Math.ceil((new Date(user.blockedUntil).getTime() - Date.now()) / (1000 * 60 * 60));
+      await ctx.reply(`⏳ You are temporarily blocked. Please try again in approximately ${remainingTime} hour${remainingTime > 1 ? 's' : ''}.\n\nYou have ${user.strikeCount} strikes. Please follow our rules and guidelines.`);
+      return;
+    }
+
+    // Clear expired block if any
+    if (user.blockedUntil && new Date(user.blockedUntil) <= new Date()) {
+      await prisma.user.update({
+        where: { userHash },
+        data: { blockedUntil: null },
+      });
     }
 
     // Create message record
@@ -120,10 +135,25 @@ submitHandler.on('message:photo', async (ctx) => {
       },
     });
 
-    // Check if user is banned
+    // Check if user is permanently banned
     if (user.isBanned) {
-      await ctx.reply('❌ You have been banned from using this bot.');
+      await ctx.reply('🚫 You have been permanently banned from using this bot due to multiple violations.');
       return;
+    }
+
+    // Check if user is temporarily blocked
+    if (user.blockedUntil && new Date(user.blockedUntil) > new Date()) {
+      const remainingTime = Math.ceil((new Date(user.blockedUntil).getTime() - Date.now()) / (1000 * 60 * 60));
+      await ctx.reply(`⏳ You are temporarily blocked. Please try again in approximately ${remainingTime} hour${remainingTime > 1 ? 's' : ''}.\n\nYou have ${user.strikeCount} strikes. Please follow our rules and guidelines.`);
+      return;
+    }
+
+    // Clear expired block if any
+    if (user.blockedUntil && new Date(user.blockedUntil) <= new Date()) {
+      await prisma.user.update({
+        where: { userHash },
+        data: { blockedUntil: null },
+      });
     }
 
     // Create message record with image
