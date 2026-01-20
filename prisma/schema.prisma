@@ -26,6 +26,7 @@ model User {
 model Message {
   id        Int      @id @default(autoincrement())
   userHash  String   @map("user_hash")
+  senderId  String   @map("sender_id") // Original Telegram user ID for notifications
   content   String?
   imageId   String?  @map("image_id") // Telegram file_id for images
   status    String   @default("pending") // pending | approved | rejected

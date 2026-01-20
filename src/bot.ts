@@ -2,6 +2,7 @@ import { Bot, Context } from 'grammy';
 import { config, validateConfig } from './config';
 import startCommand from './commands/start';
 import submitHandler from './handlers/submit';
+import actionHandler from './handlers/action';
 
 // Define custom context type
 export type MyContext = Context;
@@ -14,6 +15,9 @@ const bot = new Bot<MyContext>(config.BOT_TOKEN);
 
 // Register commands
 bot.use(startCommand);
+
+// Register action handler (inline button callbacks)
+bot.use(actionHandler);
 
 // Register handlers
 bot.use(submitHandler);

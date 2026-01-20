@@ -1,6 +1,7 @@
-import { Composer } from 'grammy';
+import { Composer, InlineKeyboard } from 'grammy';
 import crypto from 'crypto';
 import prisma from '../db/prisma';
+import { config } from '../config';
 import type { MyContext } from '../bot';
 
 const submitHandler = new Composer<MyContext>();
@@ -8,6 +9,30 @@ const submitHandler = new Composer<MyContext>();
 // Hash user ID for anonymity
 function hashUserId(userId: number): string {
   return crypto.createHash('sha256').update(userId.toString()).digest('hex').substring(0, 16);
+}
+
+// Send message to admin for review
+async function sendToAdmin(ctx: MyContext, messageId: number, content: string | null, imageId: string | null) {
+  const keyboard = new InlineKeyboard()
+    .text('✅ Approve', `approve_${messageId}`)
+    .text('❌ Reject', `reject_${messageId}`);
+
+  const reviewText = `📬 *New Confession #${messageId}*\n\n${content || '(Image only)'}`;
+
+  if (imageId) {
+    // Send photo with caption to admin
+    await ctx.api.sendPhoto(config.ADMIN_ID, imageId, {
+      caption: reviewText,
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
+  } else {
+    // Send text message to admin
+    await ctx.api.sendMessage(config.ADMIN_ID, reviewText, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard,
+    });
+  }
 }
 
 // Handle text messages
@@ -42,6 +67,7 @@ submitHandler.on('message:text', async (ctx) => {
     const message = await prisma.message.create({
       data: {
         userHash,
+        senderId: userId.toString(),
         content,
         status: 'pending',
       },
@@ -60,6 +86,9 @@ submitHandler.on('message:text', async (ctx) => {
     console.log('Status:', message.status);
     console.log('Created At:', message.createdAt);
     console.log('='.repeat(50));
+
+    // Send to admin for review
+    await sendToAdmin(ctx, message.id, content, null);
 
     await ctx.reply('✅ Your confession has been received and is pending review. Thank you for sharing! 💙');
   } catch (error) {
@@ -101,6 +130,7 @@ submitHandler.on('message:photo', async (ctx) => {
     const message = await prisma.message.create({
       data: {
         userHash,
+        senderId: userId.toString(),
         content: caption || null,
         imageId: largestPhoto.file_id,
         status: 'pending',
@@ -121,6 +151,9 @@ submitHandler.on('message:photo', async (ctx) => {
     console.log('Status:', message.status);
     console.log('Created At:', message.createdAt);
     console.log('='.repeat(50));
+
+    // Send to admin for review
+    await sendToAdmin(ctx, message.id, caption || null, largestPhoto.file_id);
 
     await ctx.reply('✅ Your image confession has been received and is pending review. Thank you for sharing! 💙');
   } catch (error) {
