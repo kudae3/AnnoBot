@@ -30,6 +30,8 @@ function getBlockDuration(strikeCount: number): number {
 // Handle approve action
 actionHandler.callbackQuery(/^approve_(\d+)$/, async (ctx) => {
   const messageId = parseInt(ctx.match[1]);
+  const moderator = ctx.from;
+  const moderatorName = moderator.first_name + (moderator.last_name ? ` ${moderator.last_name}` : '');
   
   try {
     // Get the message from database
@@ -43,7 +45,7 @@ actionHandler.callbackQuery(/^approve_(\d+)$/, async (ctx) => {
     }
 
     if (message.status !== 'pending') {
-      await ctx.answerCallbackQuery({ text: `⚠️ Message already ${message.status}!` });
+      await ctx.answerCallbackQuery({ text: `⚠️ Already ${message.status} by another moderator!` });
       return;
     }
 
@@ -74,24 +76,28 @@ actionHandler.callbackQuery(/^approve_(\d+)$/, async (ctx) => {
         '🎉 Great news! Your confession has been approved and posted to the channel. Thank you for sharing! 💙'
       );
     } catch (error) {
-      console.log('Could not notify user (they may have blocked the bot):', error);
+      console.log('Could not notify user (they may have blocked the bot)');
     }
 
-    // Update admin message to show it's been processed
+    // Update admin group message to show it's been processed
     await ctx.editMessageReplyMarkup({ reply_markup: undefined });
-    await ctx.editMessageCaption({
-      caption: `✅ APPROVED\n\n${message.content || '(Image)'}`,
-      parse_mode: 'Markdown',
-    }).catch(() => {
-      // If it's a text message (no caption), edit the text instead
-      ctx.editMessageText(`✅ APPROVED\n\n${message.content || ''}`, {
+    
+    const approvedCaption = `✅ APPROVED by ${moderatorName}\n\n${message.content || '(Image)'}`;
+    
+    if (message.imageId) {
+      await ctx.editMessageCaption({
+        caption: approvedCaption,
         parse_mode: 'Markdown',
       });
-    });
+    } else {
+      await ctx.editMessageText(approvedCaption, {
+        parse_mode: 'Markdown',
+      });
+    }
 
     await ctx.answerCallbackQuery({ text: '✅ Approved and posted!' });
     
-    console.log(`✅ Message #${messageId} approved and posted to channel`);
+    console.log(`✅ Message #${messageId} approved by ${moderatorName} and posted to channel`);
   } catch (error) {
     console.error('Error approving message:', error);
     await ctx.answerCallbackQuery({ text: '❌ Error processing approval!' });
@@ -101,6 +107,8 @@ actionHandler.callbackQuery(/^approve_(\d+)$/, async (ctx) => {
 // Handle reject action
 actionHandler.callbackQuery(/^reject_(\d+)$/, async (ctx) => {
   const messageId = parseInt(ctx.match[1]);
+  const moderator = ctx.from;
+  const moderatorName = moderator.first_name + (moderator.last_name ? ` ${moderator.last_name}` : '');
   
   try {
     // Get the message from database
@@ -114,7 +122,7 @@ actionHandler.callbackQuery(/^reject_(\d+)$/, async (ctx) => {
     }
 
     if (message.status !== 'pending') {
-      await ctx.answerCallbackQuery({ text: `⚠️ Message already ${message.status}!` });
+      await ctx.answerCallbackQuery({ text: `⚠️ Already ${message.status} by another moderator!` });
       return;
     }
 
@@ -166,10 +174,10 @@ actionHandler.callbackQuery(/^reject_(\d+)$/, async (ctx) => {
       console.log('Could not notify user (they may have blocked the bot)');
     }
 
-    // Update admin message to show it's been processed
+    // Update admin group message to show it's been processed
     await ctx.editMessageReplyMarkup({ reply_markup: undefined });
     
-    const adminCaption = `❌ REJECTED | ${statusText}\n\n${message.content || '(Image)'}`;
+    const adminCaption = `❌ REJECTED by ${moderatorName} | ${statusText}\n\n${message.content || '(Image)'}`;
     
     if (message.imageId) {
       await ctx.editMessageCaption({
@@ -184,7 +192,7 @@ actionHandler.callbackQuery(/^reject_(\d+)$/, async (ctx) => {
 
     await ctx.answerCallbackQuery({ text: `❌ Rejected! ${statusText}` });
     
-    console.log(`❌ Message #${messageId} rejected`);
+    console.log(`❌ Message #${messageId} rejected by ${moderatorName}`);
   } catch (error) {
     console.error('Error rejecting message:', error);
     await ctx.answerCallbackQuery({ text: '❌ Error processing rejection!' });

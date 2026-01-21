@@ -11,8 +11,8 @@ function hashUserId(userId: number): string {
   return crypto.createHash('sha256').update(userId.toString()).digest('hex').substring(0, 16);
 }
 
-// Send message to admin for review
-async function sendToAdmin(ctx: MyContext, messageId: number, content: string | null, imageId: string | null) {
+// Send message to admin group for review
+async function sendToAdminGroup(ctx: MyContext, messageId: number, content: string | null, imageId: string | null) {
   const keyboard = new InlineKeyboard()
     .text('✅ Approve', `approve_${messageId}`)
     .text('❌ Reject', `reject_${messageId}`);
@@ -20,15 +20,15 @@ async function sendToAdmin(ctx: MyContext, messageId: number, content: string | 
   const reviewText = `📬 *New Confession #${messageId}*\n\n${content || '(Image only)'}`;
 
   if (imageId) {
-    // Send photo with caption to admin
-    await ctx.api.sendPhoto(config.ADMIN_ID, imageId, {
+    // Send photo with caption to admin group
+    await ctx.api.sendPhoto(config.ADMIN_GROUP_ID, imageId, {
       caption: reviewText,
       parse_mode: 'Markdown',
       reply_markup: keyboard,
     });
   } else {
-    // Send text message to admin
-    await ctx.api.sendMessage(config.ADMIN_ID, reviewText, {
+    // Send text message to admin group
+    await ctx.api.sendMessage(config.ADMIN_GROUP_ID, reviewText, {
       parse_mode: 'Markdown',
       reply_markup: keyboard,
     });
@@ -102,8 +102,8 @@ submitHandler.on('message:text', async (ctx) => {
     console.log('Created At:', message.createdAt);
     console.log('='.repeat(50));
 
-    // Send to admin for review
-    await sendToAdmin(ctx, message.id, content, null);
+    // Send to admin group for review
+    await sendToAdminGroup(ctx, message.id, content, null);
 
     await ctx.reply('✅ Your confession has been received and is pending review. Thank you for sharing! 💙');
   } catch (error) {
@@ -182,8 +182,8 @@ submitHandler.on('message:photo', async (ctx) => {
     console.log('Created At:', message.createdAt);
     console.log('='.repeat(50));
 
-    // Send to admin for review
-    await sendToAdmin(ctx, message.id, caption || null, largestPhoto.file_id);
+    // Send to admin group for review
+    await sendToAdminGroup(ctx, message.id, caption || null, largestPhoto.file_id);
 
     await ctx.reply('✅ Your image confession has been received and is pending review. Thank you for sharing! 💙');
   } catch (error) {
