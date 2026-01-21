@@ -2,13 +2,33 @@ import { Composer, InlineKeyboard } from 'grammy';
 import crypto from 'crypto';
 import prisma from '../db/prisma';
 import { config } from '../config';
+import { checkBannedContent, getBannedContentMessage } from '../services/filter';
 import type { MyContext } from '../bot';
 
 const submitHandler = new Composer<MyContext>();
 
+// Constants
+const WEEKLY_LIMIT = 1; // 1 confession per week
+const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+
 // Hash user ID for anonymity
 function hashUserId(userId: number): string {
   return crypto.createHash('sha256').update(userId.toString()).digest('hex').substring(0, 16);
+}
+
+// Check if a week has passed since last reset
+function isNewWeek(lastResetDate: Date | null): boolean {
+  if (!lastResetDate) return true;
+  const now = Date.now();
+  const lastReset = new Date(lastResetDate).getTime();
+  return (now - lastReset) >= WEEK_IN_MS;
+}
+
+// Get remaining days until next submission
+function getDaysUntilNextSubmission(lastResetDate: Date): number {
+  const nextReset = new Date(lastResetDate).getTime() + WEEK_IN_MS;
+  const remaining = nextReset - Date.now();
+  return Math.ceil(remaining / (24 * 60 * 60 * 1000));
 }
 
 // Send message to admin group for review
@@ -77,6 +97,50 @@ submitHandler.on('message:text', async (ctx) => {
         data: { blockedUntil: null },
       });
     }
+
+    // Check for banned words/phrases
+    const filterResult = checkBannedContent(content);
+    if (filterResult.isBanned) {
+      console.log(`🚫 Banned word detected from user ${userHash}: "${filterResult.matchedWord}"`);
+      await ctx.reply(getBannedContentMessage(), { parse_mode: 'Markdown' });
+      return;
+    }
+
+    // Check and reset weekly submission count
+    let updatedUser = user;
+    if (isNewWeek(user.weeklyResetDate)) {
+      // Reset weekly count for new week
+      updatedUser = await prisma.user.update({
+        where: { userHash },
+        data: {
+          weeklySubmissions: 0,
+          weeklyResetDate: new Date(),
+        },
+      });
+    }
+
+    // Check weekly submission limit (1 per week)
+    if (updatedUser.weeklySubmissions >= WEEKLY_LIMIT) {
+      const daysRemaining = getDaysUntilNextSubmission(updatedUser.weeklyResetDate!);
+      await ctx.reply(
+        `⏰ *Weekly Limit Reached*\n\n` +
+        `You can only send ${WEEKLY_LIMIT} confession per week.\n\n` +
+        `⏳ Please try again in ${daysRemaining} day${daysRemaining > 1 ? 's' : ''}.\n\n` +
+        `💡 *Want to post more?*\n` +
+        `Contact us for premium access!`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    // Increment weekly submission count
+    await prisma.user.update({
+      where: { userHash },
+      data: {
+        weeklySubmissions: { increment: 1 },
+        weeklyResetDate: updatedUser.weeklyResetDate || new Date(),
+      },
+    });
 
     // Create message record
     const message = await prisma.message.create({
@@ -155,6 +219,52 @@ submitHandler.on('message:photo', async (ctx) => {
         data: { blockedUntil: null },
       });
     }
+
+    // Check for banned words/phrases in caption
+    if (caption) {
+      const filterResult = checkBannedContent(caption);
+      if (filterResult.isBanned) {
+        console.log(`🚫 Banned word detected in caption from user ${userHash}: "${filterResult.matchedWord}"`);
+        await ctx.reply(getBannedContentMessage(), { parse_mode: 'Markdown' });
+        return;
+      }
+    }
+
+    // Check and reset weekly submission count
+    let updatedUser = user;
+    if (isNewWeek(user.weeklyResetDate)) {
+      // Reset weekly count for new week
+      updatedUser = await prisma.user.update({
+        where: { userHash },
+        data: {
+          weeklySubmissions: 0,
+          weeklyResetDate: new Date(),
+        },
+      });
+    }
+
+    // Check weekly submission limit (1 per week)
+    if (updatedUser.weeklySubmissions >= WEEKLY_LIMIT) {
+      const daysRemaining = getDaysUntilNextSubmission(updatedUser.weeklyResetDate!);
+      await ctx.reply(
+        `⏰ *Weekly Limit Reached*\n\n` +
+        `You can only send ${WEEKLY_LIMIT} confession per week.\n\n` +
+        `⏳ Please try again in ${daysRemaining} day${daysRemaining > 1 ? 's' : ''}.\n\n` +
+        `💡 *Want to post more?*\n` +
+        `Contact us for premium access!`,
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+
+    // Increment weekly submission count
+    await prisma.user.update({
+      where: { userHash },
+      data: {
+        weeklySubmissions: { increment: 1 },
+        weeklyResetDate: updatedUser.weeklyResetDate || new Date(),
+      },
+    });
 
     // Create message record with image
     const message = await prisma.message.create({

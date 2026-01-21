@@ -17,6 +17,8 @@ model User {
   isBanned         Boolean   @default(false) @map("is_banned")
   blockedUntil     DateTime? @map("blocked_until") // Temporary block expiry
   lastSubmissionAt DateTime? @map("last_submission_at")
+  weeklyResetDate  DateTime? @map("weekly_reset_date") // Weekly limit reset date
+  weeklySubmissions Int      @default(0) @map("weekly_submissions")
   createdAt        DateTime  @default(now()) @map("created_at")
   
   messages         Message[]
